@@ -20,12 +20,13 @@ async function submit() {
 
 <template>
   <div class="login-wrap">
-    <div class="logo">🎮 拍拍乐</div>
-    <div class="muted">派对对战 · 同时出招 一决胜负</div>
-    <form class="col" style="width: min(320px, 86vw)" @submit.prevent="submit">
-      <input v-model="password" type="password" placeholder="输入访问密码" autofocus />
-      <button class="big" :disabled="busy || !password">进入</button>
-      <div v-if="error" style="color: var(--red); text-align: center; font-size: 14px">{{ error }}</div>
+    <div class="login-logo brand-title">拍拍乐</div>
+    <div class="brand-sub">大 能 斗 法 · 同 台 问 鼎</div>
+    <form class="col" style="width: min(340px, 86vw); margin-top: 8px" @submit.prevent="submit">
+      <input v-model="password" type="password" placeholder="天地玄门 · 请输入通行密令" autofocus />
+      <button class="big" :disabled="busy || !password">开 门 问 道</button>
+      <div v-if="error" style="color: var(--red); text-align: center; font-size: 14px; text-shadow: var(--glow-red)">{{ error }}</div>
     </form>
+    <div class="login-hint">此地仅向群内同道开放</div>
   </div>
 </template>

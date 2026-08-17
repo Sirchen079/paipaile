@@ -125,6 +125,8 @@ function submitMove(moveId: string, targetId?: string) {
 </script>
 
 <template>
+  <div class="ambient" aria-hidden="true"></div>
+
   <div v-if="toast" class="overlay" style="background:rgba(10,12,24,.55);justify-content:flex-end;padding-bottom:12vh">
     <div class="card" style="max-width:90vw">{{ toast }}</div>
   </div>

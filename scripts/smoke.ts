@@ -68,7 +68,8 @@ async function main() {
       const affordable = MOVE_ORDER.filter((m) => MOVES[m].cost <= me.v);
       const ATTACKS = ['shock', 'superShock', 'finger', 'hammerSky', 'hammerGround', 'hammerBoth', 'magicBurst', 'voidRift', 'ultimate'];
       const attacks = affordable.filter((m) => ATTACKS.includes(m));
-      const pool = attacks.length && Math.random() < 0.8 ? attacks : affordable;
+      // 纯进攻型机器人：能攻击必攻击，尽快分出胜负
+      const pool = attacks.length ? attacks : affordable;
       const moveId = pool[Math.floor(Math.random() * pool.length)] as MoveId;
       let targetId: string | undefined;
       if (MOVES[moveId].needsTarget) {

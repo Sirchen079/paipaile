@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { MOVES, MOVE_ORDER } from '@shared/moves';
+import { MOVES, MOVE_ORDER, COST_LABEL } from '@shared/moves';
 import type { GameEvent, MoveId } from '@shared/types';
 import { eventToLine, type LogLine } from '../battlelog';
+import { choreograph } from '../choreo';
 
 interface PlayerPublic {
   id: string; name: string; avatar: string;
@@ -57,7 +58,15 @@ watch(() => logLines.value.length, async () => {
   if (stageEl.value) stageEl.value.scrollTop = stageEl.value.scrollHeight;
 });
 
-// 新回合开始时清掉上一回合未完成的选招，避免残留的目标选择态
+// 触发战斗演出：有新回合结果时编排 GSAP 时间轴
+watch(() => props.results.length, (len) => {
+  if (len > 0) {
+    const latest = props.results[len - 1];
+    nextTick(() => choreograph(latest.events));
+  }
+});
+
+// 新回合开始时清掉上一回合未完成的选招
 watch(() => props.room.round, () => {
   selectedMove.value = null;
 });
@@ -86,27 +95,28 @@ function onPlayerClick(p: PlayerPublic) {
 
 const endWinnerText = computed(() => {
   if (!props.endData) return '';
-  if (props.endData.draw) return '同归于尽，平局！';
+  if (props.endData.draw) return '同归于尽 · 棋逢对手';
   const names = props.endData.winners.map(nameOf).join('、');
-  return `🏆 ${names || '无人'} 获胜！`;
+  return `${names || '无人'} · 问鼎大道`;
 });
 </script>
 
 <template>
   <div class="col" style="gap: 10px">
     <!-- 回合状态条 -->
-    <div class="card row spread" style="padding: 10px 14px">
-      <div class="banner" style="font-size: 16px">
-        {{ room.phase === 'pick' ? `第 ${room.round} 回合 · 出招！` : room.phase === 'show' ? `第 ${room.round} 回合 · 结算！` : '对局结束' }}
+    <div class="round-banner">
+      <div class="round-label">
+        {{ room.phase === 'pick' ? `第 ${room.round} 回合 · 请出招` : room.phase === 'show' ? `第 ${room.round} 回合 · 神通齐发` : '大局已定' }}
       </div>
-      <div v-if="room.phase === 'pick'" class="countdown" :class="{ urgent: secondsLeft <= 5 }">{{ secondsLeft }}s</div>
-      <div v-else class="muted">房间 {{ room.code }}</div>
+      <div v-if="room.phase === 'pick'" class="countdown" :class="{ urgent: secondsLeft <= 5 }">{{ secondsLeft }}<span style="font-size: 16px">秒</span></div>
+      <div v-else class="muted">房号 {{ room.code }}</div>
     </div>
 
-    <!-- 玩家区 -->
+    <!-- 同道席位 -->
     <div class="players">
       <div
         v-for="p in room.players" :key="p.id" class="pcard"
+        :data-pid="p.id"
         :class="{
           dead: !p.alive,
           me: p.id === myId,
@@ -116,7 +126,7 @@ const endWinnerText = computed(() => {
         @click="onPlayerClick(p)"
       >
         <div v-if="p.id === room.hostId" class="host">👑</div>
-        <div v-if="room.phase === 'pick' && p.picked" class="picked">✅</div>
+        <div v-if="room.phase === 'pick' && p.picked" class="picked">✔</div>
         <div class="avatar">{{ p.avatar }}</div>
         <div class="name">{{ p.name }}</div>
         <div class="hearts">{{ hearts(p.hp) }}</div>
@@ -124,22 +134,22 @@ const endWinnerText = computed(() => {
       </div>
     </div>
 
-    <!-- 战报舞台 -->
-    <div ref="stageEl" class="card stage">
-      <div v-if="logLines.length === 0" class="muted" style="text-align: center; margin: auto">
-        {{ room.phase === 'pick' ? '选好招式，倒计时结束一起亮牌…' : '等待结算…' }}
+    <!-- 斗法实录 -->
+    <div ref="stageEl" class="stage">
+      <div v-if="logLines.length === 0" class="muted" style="text-align: center; margin: auto; line-height: 1.9">
+        {{ room.phase === 'pick' ? '屏息凝神，选好神通。<br/>时限一到，诸天齐发……' : '神通对冲，静观其变……' }}
       </div>
       <div v-for="(l, i) in logLines" :key="i" class="log-line" :class="l.cls">{{ l.text }}</div>
     </div>
 
-    <!-- 出招面板 -->
+    <!-- 神通诀 -->
     <div v-if="canPick" class="card col">
-      <div v-if="selectedMove" class="row spread" style="background: rgba(255,84,112,.12); border-radius: 10px; padding: 8px 12px">
-        <b style="color: var(--red)">【{{ MOVES[selectedMove].name }}】点击上方玩家头像选目标</b>
-        <button class="ghost" style="padding: 6px 12px" @click="selectedMove = null">取消</button>
+      <div v-if="selectedMove" class="row spread" style="background: rgba(255,61,94,.12); border: 1px solid rgba(255,61,94,.4); border-radius: 10px; padding: 9px 14px">
+        <b style="color: var(--red); letter-spacing: 1px">【{{ MOVES[selectedMove].name }}】点上方同道头像选定目标</b>
+        <button class="ghost" style="padding: 6px 14px" @click="selectedMove = null">收回</button>
       </div>
       <template v-for="cost in [0, 1, 2, 3] as const" :key="cost">
-        <div class="move-group-title">{{ ['免费招', '消耗 1V', '消耗 2V', '消耗 3V'][cost] }}</div>
+        <div class="move-group-title">{{ COST_LABEL[cost] }}</div>
         <div class="moves">
           <button
             v-for="m in moveGroup(cost)" :key="m" class="move-btn"
@@ -150,30 +160,32 @@ const endWinnerText = computed(() => {
             <span class="cost" :class="`cost-${cost}`">{{ cost }}V</span>
             <div class="mname">{{ MOVES[m].name }}</div>
             <div class="mdesc">{{ MOVES[m].desc }}</div>
+            <div class="mflavor" :style="{ color: MOVES[m].color }">{{ MOVES[m].flavor }}</div>
           </button>
         </div>
       </template>
     </div>
     <div v-else-if="room.phase === 'pick'" class="card" style="text-align: center">
-      <b style="color: var(--green)">✅ 已出招</b> <span class="muted">等其他人亮牌…（{{ room.players.filter(p => p.alive && p.picked).length }}/{{ room.players.filter(p => p.alive).length }}）</span>
+      <b style="color: var(--green)">✔ 神通已定</b> <span class="muted">静候诸位同道亮牌…（{{ room.players.filter(p => p.alive && p.picked).length }}/{{ room.players.filter(p => p.alive).length }}）</span>
     </div>
-    <div v-else-if="!me?.alive && room.phase !== 'end'" class="card muted" style="text-align: center">
-      ☠️ 你已淘汰，观战中 —— 看玩家互相伤害
+    <div v-else-if="!me?.alive && room.phase !== 'end'" class="card muted" style="text-align: center; letter-spacing: 2px">
+      ☠ 道友已陨落 · 化作看客，观诸君斗法
     </div>
 
     <!-- 结算遮罩 -->
     <div v-if="endData" class="overlay">
-      <div class="confetti">🎉🎉🎉</div>
-      <div class="win">{{ endWinnerText }}</div>
-      <div class="card" style="max-width: 86vw">
-        <div v-for="p in endData.standings" :key="p.id" class="row spread" style="padding: 2px 4px">
+      <div class="confetti">🎊</div>
+      <div class="win-title">{{ endWinnerText }}</div>
+      <div class="card" style="max-width: 86vw; min-width: min(340px, 86vw)">
+        <div class="muted" style="text-align: center; margin-bottom: 8px; letter-spacing: 3px">本 局 战 报</div>
+        <div v-for="p in endData.standings" :key="p.id" class="row spread" style="padding: 4px 6px">
           <span>{{ p.avatar }} {{ p.name }}</span>
-          <span :style="{ color: p.alive ? 'var(--green)' : 'var(--muted)' }">{{ p.alive ? '存活' : `淘汰于第 ${room.round} 回合` }}</span>
+          <span :style="{ color: p.alive ? 'var(--green)' : 'var(--text-3)', fontWeight: 700 }">{{ p.alive ? '胜出' : `陨落于第 ${room.round} 回合` }}</span>
         </div>
       </div>
-      <button v-if="isHost" style="min-width: 200px" @click="emit('start')">🔁 再来一局</button>
-      <div v-else class="muted">等房主开下一局…</div>
-      <button class="ghost" style="min-width: 200px" @click="emit('leave')">退出房间</button>
+      <button v-if="isHost" class="big" style="min-width: 240px" @click="emit('start')">🔁 再 开 一 局</button>
+      <div v-else class="muted" style="letter-spacing: 2px">静候擂主再开一局……</div>
+      <button class="ghost" style="min-width: 240px" @click="emit('leave')">拂 袖 离 场</button>
     </div>
   </div>
 </template>

@@ -23,12 +23,16 @@ function join() {
 </script>
 
 <template>
-  <div class="col" style="margin-top: 8vh; gap: 16px">
-    <div class="title" style="text-align: center">🎮 拍拍乐</div>
+  <div class="col" style="margin-top: 5vh; gap: 18px">
+    <div style="text-align: center">
+      <div class="brand-title" style="font-size: 46px">拍拍乐</div>
+      <div class="brand-sub" style="margin-top: 4px">同 台 斗 法 · 胜 者 为 尊</div>
+    </div>
 
     <div class="card col">
-      <div style="font-weight: 700">我的形象</div>
-      <input v-model="nickname" maxlength="12" placeholder="游戏昵称（玩家认得出你）" />
+      <div style="font-weight: 700; letter-spacing: 2px">道友名号</div>
+      <input v-model="nickname" maxlength="12" placeholder="报上名来（玩家认得出你）" />
+      <div class="muted">法相</div>
       <div class="avatar-grid">
         <div
           v-for="a in AVATARS" :key="a" class="avatar-cell" :class="{ on: a === avatar }"
@@ -37,18 +41,19 @@ function join() {
       </div>
     </div>
 
-    <button class="big" :disabled="!canGo" @click="create">⚔️ 创建房间</button>
+    <button class="big" :disabled="!canGo" @click="create">⚔ 开 坛 立 擂</button>
 
     <div class="card col">
-      <div style="font-weight: 700">加入房间</div>
+      <div style="font-weight: 700; letter-spacing: 2px">登门挑战</div>
       <div class="row">
-        <input v-model="code" inputmode="numeric" maxlength="4" placeholder="4 位房间码" />
-        <button :disabled="!canGo || !/^\d{4}$/.test(code.trim())" @click="join">加入</button>
+        <input v-model="code" inputmode="numeric" maxlength="4" placeholder="四位房号" style="letter-spacing: 4px; font-weight: 700" />
+        <button style="white-space: nowrap" :disabled="!canGo || !/^\d{4}$/.test(code.trim())" @click="join">入 阵</button>
       </div>
     </div>
 
-    <div class="muted" style="text-align: center">
-      规则：所有人同时出招，一起结算。<br />V 是能量，爆V 可充能；招式之间循环克制，没有无敌招。
+    <div class="muted" style="text-align: center; line-height: 1.8">
+      诸天齐出招，一回合定生死。<br />
+      V 是法力，爆V 聚气；神通相生相克，世间无无敌之术。
     </div>
   </div>
 </template>
