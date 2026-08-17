@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      - ACCESS_PASSWORD=${ACCESS_PASSWORD:-change-me}
+      - COOKIE_SECRET=${COOKIE_SECRET:-change-me-too}
+      - PORT=3000
+    expose:
+      - "3000"
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # 有证书后放开 443 并在 nginx.conf 启用 TLS 段
+      # - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # 有证书后挂载证书目录：
+      # - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - app

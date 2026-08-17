@@ -1,0 +1,143 @@
+:root {
+  --bg: #0f1220;
+  --bg-soft: #171b2e;
+  --card: #1c2138;
+  --card-hi: #262c4a;
+  --line: #2e3557;
+  --text: #e8ebf7;
+  --muted: #8b93b8;
+  --gold: #ffd54a;
+  --cyan: #4ad7ff;
+  --green: #43d97e;
+  --red: #ff5470;
+  --purple: #b06cff;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  min-height: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app { max-width: 760px; margin: 0 auto; padding: 12px 12px 24px; }
+
+button {
+  font-family: inherit;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .08s ease, filter .15s ease;
+  color: #10131f;
+  background: var(--gold);
+}
+button:active { transform: scale(.96); }
+button:disabled { filter: grayscale(.8) brightness(.6); cursor: not-allowed; }
+button.ghost { background: var(--card-hi); color: var(--text); }
+button.danger { background: var(--red); color: #fff; }
+button.big { width: 100%; padding: 15px; font-size: 18px; }
+
+input, select {
+  font-family: inherit;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 16px;
+  width: 100%;
+  outline: none;
+}
+input:focus { border-color: var(--gold); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.muted { color: var(--muted); font-size: 13px; }
+.title { font-size: 22px; font-weight: 800; }
+.row { display: flex; gap: 10px; align-items: center; }
+.col { display: flex; flex-direction: column; gap: 10px; }
+.spread { justify-content: space-between; }
+
+/* ---- 登录 ---- */
+.login-wrap { min-height: 80vh; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 18px; text-align: center; }
+.logo { font-size: 44px; font-weight: 900; letter-spacing: 2px;
+  background: linear-gradient(120deg, var(--gold), var(--red), var(--purple));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ---- 头像选择 ---- */
+.avatar-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.avatar-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 22px; border-radius: 10px; background: var(--bg-soft); border: 2px solid transparent; cursor: pointer; }
+.avatar-cell.on { border-color: var(--gold); background: var(--card-hi); }
+
+/* ---- 玩家卡 ---- */
+.players { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.pcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px;
+  text-align: center; position: relative; transition: opacity .3s; }
+.pcard .avatar { font-size: 30px; line-height: 1.2; }
+.pcard .name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard .hearts { color: var(--red); font-size: 12px; letter-spacing: 1px; min-height: 16px; }
+.pcard .v { color: var(--gold); font-size: 12px; font-weight: 700; }
+.pcard.dead { opacity: .35; filter: grayscale(1); }
+.pcard.dead .avatar { transform: rotate(90deg); }
+.pcard.me { border-color: var(--cyan); }
+.pcard.offline::after { content: '离线'; position: absolute; top: 4px; right: 4px; font-size: 10px; color: var(--muted); }
+.pcard.targetable { cursor: pointer; border-color: var(--red); animation: pulse 0.9s infinite; }
+.pcard.target-picked { border-color: var(--gold); box-shadow: 0 0 12px var(--gold); }
+.pcard .host { position: absolute; top: 4px; left: 6px; font-size: 10px; color: var(--gold); }
+.pcard .picked { position: absolute; top: 4px; right: 6px; font-size: 11px; }
+
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,84,112,.5); } 50% { box-shadow: 0 0 0 6px rgba(255,84,112,0); } }
+
+/* ---- 出招面板 ---- */
+.moves { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+@media (min-width: 520px) { .moves { grid-template-columns: repeat(4, 1fr); } }
+.move-btn { background: var(--card-hi); color: var(--text); text-align: left; padding: 10px 12px; position: relative; }
+.move-btn .cost { position: absolute; top: 6px; right: 8px; font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 99px; }
+.cost-0 { background: #3a4166; color: #aab2d8; }
+.cost-1 { background: rgba(67,217,126,.18); color: var(--green); }
+.cost-2 { background: rgba(74,215,255,.15); color: var(--cyan); }
+.cost-3 { background: rgba(255,213,74,.15); color: var(--gold); }
+.move-btn .mname { font-size: 15px; font-weight: 800; }
+.move-btn .mdesc { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+.move-btn.sel { border: 2px solid var(--red); }
+.move-group-title { font-size: 12px; color: var(--muted); margin: 8px 2px 2px; font-weight: 700; }
+
+/* ---- 战报 ---- */
+.stage { min-height: 180px; max-height: 34vh; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.log-line { font-size: 14px; line-height: 1.5; animation: fadein .25s ease; }
+.log-line.hit { color: var(--red); font-weight: 800; }
+.log-line.blocked { color: var(--cyan); }
+.log-line.miss { color: var(--muted); }
+.log-line.death { color: #fff; background: rgba(255,84,112,.16); border-radius: 8px; padding: 3px 8px; font-weight: 800; }
+.log-line.clash { color: var(--purple); font-weight: 700; }
+.log-line.cancel { color: var(--purple); }
+.log-line.roundend { text-align: center; color: var(--muted); margin: 6px 0 2px; }
+.log-line.reveal { color: var(--text); }
+.log-line.charge { color: var(--gold); }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+/* ---- 回合横幅 / 倒计时 ---- */
+.banner { text-align: center; font-weight: 900; letter-spacing: 1px; margin: 4px 0; }
+.countdown { font-size: 30px; font-weight: 900; color: var(--gold); text-align: center; font-variant-numeric: tabular-nums; }
+.countdown.urgent { color: var(--red); animation: pulse .6s infinite; }
+
+/* ---- 房间码 ---- */
+.code-big { font-size: 42px; font-weight: 900; letter-spacing: 10px; color: var(--gold); text-align: center; font-variant-numeric: tabular-nums; }
+
+.overlay { position: fixed; inset: 0; background: rgba(10,12,24,.88); display: flex; flex-direction: column;
+  justify-content: center; align-items: center; gap: 16px; z-index: 50; padding: 24px; text-align: center; }
+.overlay .win { font-size: 34px; font-weight: 900; color: var(--gold); }
+.confetti { font-size: 40px; animation: fadein .4s ease; }

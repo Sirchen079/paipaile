@@ -1,0 +1,19 @@
+{
+  "name": "paipaile-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.5",
+    "vue": "^3.4.38"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2"
+  }
+}
