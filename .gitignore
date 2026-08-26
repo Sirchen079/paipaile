@@ -15,3 +15,7 @@ pipo/
 
 # Windows 保留设备名误生成的文件
 nul
+
+# 一键脚本运行产物
+.deploy.pid
+deploy.log

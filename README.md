@@ -46,9 +46,41 @@ npm run smoke        # 需先起服务端；模拟 3 个机器人打完整一局
 |---|---|---|
 | `ACCESS_PASSWORD` | ✅ | 网页访问密码，玩家输这个进门。不设置会用内置默认密码，等于没锁门 |
 | `COOKIE_SECRET` | ✅ | Cookie 签名密钥，用 `openssl rand -hex 32` 生成一段随机串 |
+| `ADMIN_PASSWORD` | — | 管理员密码（可选）。登录时输入它将**直接进入演武场**（特效调试页）；留空 = 禁用 |
 | `PORT` | — | 服务监听端口，默认 `3000` |
 
-### 方式一：Docker 部署（推荐）
+### 方式一：一键脚本部署（推荐）
+
+配好环境变量后一条命令完成「装依赖 → 构建前端 → 拉起服务」：
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/Sirchen079/paipaile.git
+cd paipaile
+
+# 2. 按样式配置环境变量（只改 ACCESS_PASSWORD 即可，COOKIE_SECRET 留占位符会自动生成）
+cp .env.example .env
+vim .env
+
+# 3. 一键启动（自动检测并安装 Node 20+、装依赖、构建前端、pm2/nohup 拉起并做健康检查）
+./deploy.sh
+```
+
+看到「就绪」提示后，浏览器访问 `http://服务器IP:3000` 即可游玩（端口跟随 `.env` 的 `PORT`）。
+
+常用运维：
+
+```bash
+./deploy.sh stop       # 停止
+./deploy.sh restart    # 重启
+./deploy.sh status     # 运行状态 + 健康检查（401 = 密码门正常工作）
+./deploy.sh update     # 拉取最新代码并重新构建、重启
+./deploy.sh logs       # 跟随日志
+```
+
+脚本优先用 pm2 托管（装了会自动 `pm2 save`，配合 `pm2 startup` 可开机自启）；没装 pm2 时用 nohup 兜底，日志写在 `deploy.log`。
+
+### 方式二：Docker 部署
 
 ```bash
 # 1. 安装 Docker（已装可跳过）
@@ -78,7 +110,7 @@ git pull && docker compose up -d --build        # 更新到最新版
 
 上 HTTPS（可选，需要域名）：证书放进 `./certs/`（`full.pem` + `key.pem`）→ 放开 `docker-compose.yml` 里 443 端口映射和 certs 挂载的注释 → 放开 `nginx.conf` 底部的 TLS server 段并把 `server_name` 改成你的域名 → `docker compose up -d` 生效。
 
-### 方式二：Linux 裸机部署（Node.js + pm2）
+### 方式三：Linux 裸机手动部署（Node.js + pm2）
 
 不装 Docker 也行，直接常驻一个 Node 进程。
 

@@ -10,9 +10,7 @@ import RoomView from './components/RoomView.vue';
 import GameView from './components/GameView.vue';
 import ArenaDemo from './components/ArenaDemo.vue';
 import type { GameEvent } from '@shared/types';
-
-// #demo 直达特效调试页
-const isDemo = location.hash === '#demo';
+import type { Role } from './api';
 
 interface PlayerPublic {
   id: string; name: string; avatar: string;
@@ -27,7 +25,7 @@ interface RoomState {
 interface RoundResultData { round: number; events: GameEvent[]; standings: PlayerPublic[] }
 interface EndData { winners: string[]; draw: boolean; standings: PlayerPublic[] }
 
-const view = ref<'loading' | 'login' | 'home' | 'room'>('loading');
+const view = ref<'loading' | 'login' | 'home' | 'room' | 'arena'>('loading');
 const room = ref<RoomState | null>(null);
 const results = ref<RoundResultData[]>([]);
 const endData = ref<EndData | null>(null);
@@ -112,8 +110,9 @@ onMounted(() => {
     }
   });
 
-  checkAuth().then((ok) => {
-    if (ok) {
+  checkAuth().then((role) => {
+    if (role === 'admin') view.value = 'arena';
+    else if (role === 'player') {
       view.value = 'home';
       socket.connect();
       preloadInkFx();
@@ -125,9 +124,20 @@ onMounted(() => {
 
 onUnmounted(() => document.removeEventListener('pointerdown', unlockSfx));
 
-function onLoggedIn() {
+function onLoggedIn(role: Role) {
+  if (role === 'admin') {
+    view.value = 'arena';
+    return;
+  }
   view.value = 'home';
   socket.connect();
+}
+
+/** 演武场是纯客户端调试页；管理员从这里下场游玩（管理员令牌同样通过 WS 握手校验） */
+function enterLobby() {
+  view.value = 'home';
+  socket.connect();
+  preloadInkFx();
 }
 
 function enterRoom(profileIn: Profile, code?: string) {
@@ -184,7 +194,13 @@ function submitMove(moveId: string, targetId?: string) {
 
   <div v-if="toast" class="toast" role="alert">{{ toast }}</div>
 
-  <ArenaDemo v-if="isDemo" />
+  <ArenaDemo v-if="view === 'arena'" />
+  <button
+    v-if="view === 'arena'"
+    class="ghost"
+    style="position: fixed; right: 18px; bottom: 18px; z-index: 99"
+    @click="enterLobby"
+  >返回大厅</button>
   <template v-else>
     <div v-if="view === 'loading'" class="loading-mark brand-title">拍拍乐</div>
     <LoginView v-if="view === 'login'" @done="onLoggedIn" />

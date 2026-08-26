@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 演武场（#demo 进入）：水墨特效调试页 —— 虚拟座次入座，
+ * 演武场（管理员密码登录直达）：水墨特效调试页 —— 虚拟座次入座，
  * 单招点播 + 完整回合连播，用于脱离联机时序验证/调优特效。
  */
 import { onMounted, onBeforeUnmount, ref } from 'vue';

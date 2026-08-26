@@ -16,7 +16,7 @@ const emit = defineEmits<{ config: [patch: Record<string, unknown>]; start: []; 
 const isHost = computed(() => props.myId === props.room.hostId);
 const url = computed(() => `${location.host}`);
 
-/* 一键复制房号（传音入群的主路径）。非安全上下文（http 直连 IP）无 clipboard API,降级 execCommand */
+/* 一键复制房号（发出去邀战的主路径）。非安全上下文（http 直连 IP）无 clipboard API,降级 execCommand */
 const copied = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 async function copyCode() {
@@ -57,7 +57,7 @@ function onLeaveClick() {
 <template>
   <div class="col" style="gap: 14px">
     <div class="card col" style="align-items: center; gap: 8px">
-      <div class="brand-sub">擂 台 房 号 · 传 音 群 内 邀 战</div>
+      <div class="brand-sub">擂 台 房 号 · 传 音 邀 战</div>
       <div class="code-big">{{ room.code }}</div>
       <div class="row" style="gap: 8px">
         <span class="muted">{{ url }}</span>

@@ -7,23 +7,33 @@ function safeEqual(a: string, b: string): boolean {
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
 
-export function makeAuth(secret: string, password: string) {
+export type Role = 'admin' | 'player';
+
+export function makeAuth(secret: string, password: string, adminPassword = '') {
   const sign = (payload: string) =>
     crypto.createHmac('sha256', secret).update(payload).digest('base64url');
 
   return {
-    issueToken(): { token: string; maxAge: number } {
-      const payload = String(Date.now() + TTL_MS);
+    issueToken(role: Role = 'player'): { token: string; maxAge: number } {
+      // 管理员令牌 payload 带 a: 前缀；玩家令牌保持纯时间戳（兼容历史已签发的 cookie）
+      const payload = (role === 'admin' ? 'a:' : '') + String(Date.now() + TTL_MS);
       return { token: `${payload}.${sign(payload)}`, maxAge: TTL_MS / 1000 };
     },
-    verifyToken(token: string | undefined): boolean {
-      if (!token) return false;
-      const [payload, sig] = token.split('.');
-      if (!payload || !sig) return false;
-      return safeEqual(sig, sign(payload)) && Number(payload) > Date.now();
+    verifyToken(token: string | undefined): Role | null {
+      if (!token) return null;
+      const dot = token.lastIndexOf('.');
+      if (dot <= 0) return null;
+      const payload = token.slice(0, dot);
+      if (!safeEqual(token.slice(dot + 1), sign(payload))) return null;
+      const admin = payload.startsWith('a:');
+      const exp = Number(payload.slice(admin ? 2 : 0));
+      return Number.isFinite(exp) && exp > Date.now() ? (admin ? 'admin' : 'player') : null;
     },
     checkPassword(attempt: string): boolean {
       return safeEqual(attempt ?? '', password);
+    },
+    checkAdmin(attempt: string): boolean {
+      return adminPassword.length > 0 && safeEqual(attempt ?? '', adminPassword);
     },
   };
 }
