@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import crypto from 'node:crypto';
 import express from 'express';
 import { Server } from 'socket.io';
 import { makeAuth, makeLoginThrottle, parseCookies, type Role } from './auth';
@@ -17,7 +18,8 @@ try {
 const PORT = Number(process.env.PORT || 25173);
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || 'paipai2026';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
-const COOKIE_SECRET = process.env.COOKIE_SECRET || Math.random().toString(36).slice(2);
+// 未显式设置时用密码学随机密钥兜底（重启后已签发 cookie 失效，需重新登录）
+const COOKIE_SECRET = process.env.COOKIE_SECRET || crypto.randomBytes(32).toString('hex');
 
 if (!process.env.ACCESS_PASSWORD) {
   console.warn('[警告] 未设置 ACCESS_PASSWORD，当前使用默认密码 paipai2026，上线前务必修改（.env）');
@@ -26,6 +28,10 @@ if (!process.env.ACCESS_PASSWORD) {
 const auth = makeAuth(COOKIE_SECRET, ACCESS_PASSWORD, ADMIN_PASSWORD);
 const throttle = makeLoginThrottle();
 const app = express();
+// 部署在反向代理（nginx 等）后面时设 TRUST_PROXY=1：按 X-Forwarded-For 取真实来源 IP，
+// 否则登录限流会把所有玩家算进同一个桶，一个攻击者试错就能把全员锁在门外
+if (process.env.TRUST_PROXY) app.set('trust proxy', 1);
+app.disable('x-powered-by');
 app.use(express.json());
 
 const COOKIE_NAME = 'ppa_token';

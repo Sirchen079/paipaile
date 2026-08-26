@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import { resolveRound, checkWin } from '../shared/engine';
 import { MOVES } from '../shared/moves';
@@ -13,6 +14,10 @@ export interface RoomConfig {
 export type Phase = 'lobby' | 'pick' | 'show' | 'end';
 
 export const MAX_PLAYERS = 9;
+
+/** 头像白名单：客户端传来的 avatar 只允许落在这几个已托管资源内，防外链/脏数据注入 */
+const AVATARS = new Set(['daozun', 'jianxiu', 'mozun', 'xianzi']);
+const safeAvatar = (a: string) => (AVATARS.has(a) ? a : 'jianxiu');
 
 interface PublicPlayer {
   id: string; name: string; avatar: string;
@@ -74,7 +79,7 @@ export class Room {
     if (ghost) {
       ghost.id = socket.id;
       ghost.connected = true;
-      ghost.avatar = avatar || ghost.avatar;
+      ghost.avatar = safeAvatar(avatar);
       this.touchGhostClock();
       socket.join(this.code);
       this.sync();
@@ -83,7 +88,7 @@ export class Room {
     if (this.players.length >= MAX_PLAYERS) return { ok: false, error: '房间已满（最多 9 人）' };
     if (this.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: '昵称已被使用' };
     const player: PlayerState = {
-      id: socket.id, name, avatar: avatar || 'jianxiu',
+      id: socket.id, name, avatar: safeAvatar(avatar),
       hp: this.config.hp, v: 0, alive: true, connected: true,
     };
     this.players.push(player);
@@ -244,7 +249,7 @@ export class RoomManager {
   create(): Room {
     let code = '';
     do {
-      code = String(Math.floor(1000 + Math.random() * 9000));
+      code = String(crypto.randomInt(1000, 10000));   // 密码学随机，避免 Math.random 可预测
     } while (this.rooms.has(code));
     const room = new Room(this.io, code);
     this.rooms.set(code, room);

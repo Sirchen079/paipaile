@@ -6,6 +6,8 @@ services:
       - ACCESS_PASSWORD=${ACCESS_PASSWORD:-change-me}
       - COOKIE_SECRET=${COOKIE_SECRET:-change-me-too}
       - PORT=25173
+      # nginx 前置反代，按 X-Forwarded-For 识别真实来源 IP（登录限流按真实 IP 分桶）
+      - TRUST_PROXY=1
     expose:
       - "25173"
 
@@ -13,7 +15,8 @@ services:
     image: nginx:alpine
     restart: unless-stopped
     ports:
-      - "80:80"
+      # 高位端口对外，避开常见扫描段；容器内 nginx 仍监听 80
+      - "25173:80"
       # 有证书后放开 443 并在 nginx.conf 启用 TLS 段
       # - "443:443"
     volumes:
