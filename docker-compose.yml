@@ -5,9 +5,9 @@ services:
     environment:
       - ACCESS_PASSWORD=${ACCESS_PASSWORD:-change-me}
       - COOKIE_SECRET=${COOKIE_SECRET:-change-me-too}
-      - PORT=3000
+      - PORT=25173
     expose:
-      - "3000"
+      - "25173"
 
   nginx:
     image: nginx:alpine

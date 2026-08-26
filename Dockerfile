@@ -16,5 +16,5 @@ COPY tsconfig.json ./
 COPY shared/ ./shared/
 COPY server/ ./server/
 COPY --from=web-build /app/dist ./web/dist
-EXPOSE 3000
+EXPOSE 25173
 CMD ["npx", "tsx", "server/index.ts"]

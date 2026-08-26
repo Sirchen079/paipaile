@@ -21,7 +21,7 @@
 ```bash
 # 根目录（服务端 + 结算引擎）
 npm install
-npm run dev          # 服务端 http://localhost:3000（默认密码 paipai2026）
+npm run dev          # 服务端 http://localhost:25173（默认密码 paipai2026）
 
 # 另开终端：前端
 cd web
@@ -47,7 +47,7 @@ npm run smoke        # 需先起服务端；模拟 3 个机器人打完整一局
 | `ACCESS_PASSWORD` | ✅ | 网页访问密码，玩家输这个进门。不设置会用内置默认密码，等于没锁门 |
 | `COOKIE_SECRET` | ✅ | Cookie 签名密钥，用 `openssl rand -hex 32` 生成一段随机串 |
 | `ADMIN_PASSWORD` | — | 管理员密码（可选）。登录时输入它将**直接进入演武场**（特效调试页）；留空 = 禁用 |
-| `PORT` | — | 服务监听端口，默认 `3000` |
+| `PORT` | — | 服务监听端口，默认 `25173`（高位端口，避开常见扫描段；云服务器需在安全组放行） |
 
 ### 方式一：一键脚本部署（推荐）
 
@@ -66,7 +66,7 @@ vim .env
 ./deploy.sh
 ```
 
-看到「就绪」提示后，浏览器访问 `http://服务器IP:3000` 即可游玩（端口跟随 `.env` 的 `PORT`）。
+看到「就绪」提示后，浏览器访问 `http://服务器IP:25173` 即可游玩（端口跟随 `.env` 的 `PORT`，记得在安全组放行）。
 
 常用运维：
 
@@ -137,7 +137,7 @@ pm2 start npx --name paipaile -- tsx server/index.ts
 pm2 save && pm2 startup
 ```
 
-此时服务跑在 `3000` 端口：要么玩家直接访问 `http://IP:3000`，要么加一层系统 nginx 转 80 端口——反代配置参考仓库根目录的 `nginx.conf`，注意 `/socket.io/` 那段的 **WebSocket 升级头（Upgrade/Connection）必须保留**，否则联机不通。
+此时服务跑在 `25173` 端口：要么玩家直接访问 `http://IP:25173`，要么加一层系统 nginx 转 80 端口——反代配置参考仓库根目录的 `nginx.conf`，注意 `/socket.io/` 那段的 **WebSocket 升级头（Upgrade/Connection）必须保留**，否则联机不通。
 
 更新版本：
 

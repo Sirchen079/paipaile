@@ -1,12 +1,12 @@
 /**
  * 冒烟测试：模拟 3 个客户端连上本地服务端打完整一局。
- * 前置：npm run dev（服务端跑在 :3000，密码取 ACCESS_PASSWORD 或默认 paipai2026）
+ * 前置：npm run dev（服务端跑在 :25173，密码取 ACCESS_PASSWORD 或默认 paipai2026）
  */
 import { io, type Socket } from 'socket.io-client';
 import { MOVES, MOVE_ORDER } from '../shared/moves';
 import type { GameEvent, MoveId } from '../shared/types';
 
-const BASE = 'http://localhost:3000';
+const BASE = 'http://localhost:25173';
 const PASSWORD = process.env.ACCESS_PASSWORD || 'paipai2026';
 
 async function login(): Promise<string> {

@@ -14,7 +14,7 @@ try {
   }
 } catch { /* .env 不存在则跳过 */ }
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 25173);
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || 'paipai2026';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const COOKIE_SECRET = process.env.COOKIE_SECRET || Math.random().toString(36).slice(2);

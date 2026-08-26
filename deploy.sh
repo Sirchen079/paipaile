@@ -32,7 +32,7 @@ using_pm2() { command -v pm2 >/dev/null 2>&1; }
 
 server_port() {
   local p; p="$(env_value PORT)"
-  echo "${p:-3000}"
+  echo "${p:-25173}"
 }
 
 print_url() {
