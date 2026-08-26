@@ -36,22 +36,83 @@ npm test             # 结算引擎 21 个单测
 npm run smoke        # 需先起服务端；模拟 3 个机器人打完整一局
 ```
 
-## 部署到云服务器（Docker）
+## 部署
+
+一台最低配（1C1G）的 Linux 云服务器即可：单 Node 进程 + 内存房间，无数据库；前端构建产物由服务端直接托管，不需要额外的静态站点。
+
+### 环境变量
+
+| 变量 | 必改 | 说明 |
+|---|---|---|
+| `ACCESS_PASSWORD` | ✅ | 网页访问密码，玩家输这个进门。不设置会用内置默认密码，等于没锁门 |
+| `COOKIE_SECRET` | ✅ | Cookie 签名密钥，用 `openssl rand -hex 32` 生成一段随机串 |
+| `PORT` | — | 服务监听端口，默认 `3000` |
+
+### 方式一：Docker 部署（推荐）
 
 ```bash
-# 1. 准备环境变量（必改！）
-cp .env.example .env
-vim .env             # 设置 ACCESS_PASSWORD 和 COOKIE_SECRET
+# 1. 安装 Docker（已装可跳过）
+curl -fsSL https://get.docker.com | sh
 
-# 2. 一键起（app + nginx）
+# 2. 克隆仓库
+git clone https://github.com/Sirchen079/paipaile.git
+cd paipaile
+
+# 3. 配置环境变量（必改！）
+cp .env.example .env
+vim .env      # ACCESS_PASSWORD 设成你的密码；COOKIE_SECRET 用 openssl rand -hex 32 生成
+
+# 4. 构建并启动（app + nginx 两个容器，前端在镜像内自动构建）
 docker compose up -d --build
 
-# 3. 开放 80 端口，玩家访问 http://你的服务器IP 即可
+# 5. 云厂商安全组/防火墙放行 80 端口，玩家浏览器访问 http://你的服务器IP
 ```
 
-有域名的话：把证书放进 `./certs/`，放开 `docker-compose.yml` 的 443 和 `nginx.conf` 的 TLS 段，`server_name` 改成你的域名。
+常用运维命令：
 
-不用 Docker 也可以：`npm install && cd web && npm run build && cd .. && pm2 start npx --name paipaile -- tsx server/index.ts`，再用自己的 nginx 反代（参考 `nginx.conf`，**WebSocket 升级头必须配**）。
+```bash
+docker compose logs -f                          # 看日志
+docker compose restart                          # 重启
+git pull && docker compose up -d --build        # 更新到最新版
+```
+
+上 HTTPS（可选，需要域名）：证书放进 `./certs/`（`full.pem` + `key.pem`）→ 放开 `docker-compose.yml` 里 443 端口映射和 certs 挂载的注释 → 放开 `nginx.conf` 底部的 TLS server 段并把 `server_name` 改成你的域名 → `docker compose up -d` 生效。
+
+### 方式二：Linux 裸机部署（Node.js + pm2）
+
+不装 Docker 也行，直接常驻一个 Node 进程。
+
+```bash
+# 1. 安装 Node.js 20+（Ubuntu/Debian 示例；其它发行版用对应包管理器或 nvm）
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# 2. 克隆并安装依赖
+git clone https://github.com/Sirchen079/paipaile.git
+cd paipaile
+npm install
+
+# 3. 构建前端产物（产出 web/dist，服务端会直接托管它）
+cd web && npm install && npm run build && cd ..
+
+# 4. 配置环境变量（同上，必改）
+cp .env.example .env
+vim .env
+
+# 5. pm2 常驻运行 + 开机自启
+npm install -g pm2
+pm2 start npx --name paipaile -- tsx server/index.ts
+pm2 save && pm2 startup
+```
+
+此时服务跑在 `3000` 端口：要么玩家直接访问 `http://IP:3000`，要么加一层系统 nginx 转 80 端口——反代配置参考仓库根目录的 `nginx.conf`，注意 `/socket.io/` 那段的 **WebSocket 升级头（Upgrade/Connection）必须保留**，否则联机不通。
+
+更新版本：
+
+```bash
+git pull && npm install && cd web && npm install && npm run build && cd ..
+pm2 restart paipaile
+```
 
 ## 项目结构
 
