@@ -77,7 +77,16 @@ io.on('connection', (socket) => {
 
   const getRoom = () => (roomCode ? manager.get(roomCode) : undefined);
 
+  // 同一 socket 换房前先退出旧房间（防御：正常前端不会触发，但别让座位与广播泄漏到旧房）
+  const leaveOldRoom = () => {
+    if (!roomCode) return;
+    const old = manager.get(roomCode);
+    if (old) old.leave(socket.id);
+    roomCode = null;
+  };
+
   socket.on('room:create', (payload: { nickname?: string; avatar?: string }, ack?: (r: any) => void) => {
+    leaveOldRoom();
     const room = manager.create();
     const r = room.join(socket, payload?.nickname ?? '', payload?.avatar ?? '');
     if (r.ok) roomCode = room.code;
@@ -87,6 +96,7 @@ io.on('connection', (socket) => {
   socket.on('room:join', (payload: { code?: string; nickname?: string; avatar?: string }, ack?: (r: any) => void) => {
     const room = manager.get(payload?.code ?? '');
     if (!room) { ack?.({ ok: false, error: '房间不存在' }); return; }
+    if (roomCode !== room.code) leaveOldRoom();
     const r = room.join(socket, payload?.nickname ?? '', payload?.avatar ?? '');
     if (r.ok) roomCode = room.code;
     ack?.(r);

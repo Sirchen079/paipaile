@@ -70,11 +70,18 @@ async function main() {
       const attacks = affordable.filter((m) => ATTACKS.includes(m));
       // 纯进攻型机器人：能攻击必攻击，尽快分出胜负
       const pool = attacks.length ? attacks : affordable;
-      const moveId = pool[Math.floor(Math.random() * pool.length)] as MoveId;
+      // 偏好单体直伤（命中率高，缩短局数；仍保留概率覆盖 AoE/反制招）
+      const DIRECT = ['shock', 'superShock', 'finger', 'ultimate'];
+      const directs = pool.filter((m) => DIRECT.includes(m));
+      const useDirect = directs.length > 0 && Math.random() < 0.6;
+      const finalPool = useDirect ? directs : pool;
+      const moveId = finalPool[Math.floor(Math.random() * finalPool.length)] as MoveId;
       let targetId: string | undefined;
       if (MOVES[moveId].needsTarget) {
-        const others = snap.players.filter((p) => p.alive && p.id !== sock.id);
-        targetId = others[Math.floor(Math.random() * others.length)]?.id;
+        // 链式指目标（A→B→C→A 环）：杜绝互指对冲抵消，保证每回合稳定产生命中
+        const sortedIds = snap.players.filter((p) => p.alive).map((p) => p.id).sort();
+        const pos = sortedIds.indexOf(sock.id);
+        if (pos >= 0) targetId = sortedIds[(pos + 1) % sortedIds.length];
       }
       sock.emit('game:submit', { moveId, targetId }, (r: any) => {
         if (!r?.ok) fail(`出招被拒: ${r?.error}`);

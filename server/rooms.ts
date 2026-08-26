@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { resolveRound, checkWin } from '../shared/engine';
 import { MOVES } from '../shared/moves';
+import { roundPlaybackMs } from '../shared/pacing';
 import type { GameEvent, PlayerState, Submission, WinCheck } from '../shared/types';
 
 export interface RoomConfig {
@@ -30,6 +31,9 @@ export class Room {
   hostId = '';
   private submissions = new Map<string, Submission>();
   private timer: NodeJS.Timeout | null = null;
+  /** 全员掉线时刻（>0 且超过宽限期的房间可回收；留座便于断线重连） */
+  private ghostSince = 0;
+  static readonly GHOST_GRACE_MS = 10 * 60 * 1000;
 
   constructor(io: Server, code: string) {
     this.io = io;
@@ -41,10 +45,22 @@ export class Room {
   }
 
   private showMs(events: GameEvent[]): number {
-    return Math.min(8000, 2000 + 600 * events.length);
+    // 与前端 playRound 的节奏表一致，上限放宽到 20s 以容纳大招连发
+    return Math.min(20000, roundPlaybackMs(events));
   }
 
   isEmpty(): boolean { return this.players.length === 0; }
+
+  /** 全员掉线且超过宽限期（空留座房间不再无限驻留内存） */
+  recyclable(now = Date.now()): boolean {
+    return this.ghostSince > 0 && now - this.ghostSince > Room.GHOST_GRACE_MS;
+  }
+
+  private touchGhostClock() {
+    this.ghostSince = this.players.every((p) => !p.connected) && this.players.length > 0
+      ? (this.ghostSince || Date.now())
+      : 0;
+  }
 
   findPlayer(id: string): PlayerState | undefined {
     return this.players.find((p) => p.id === id);
@@ -59,6 +75,7 @@ export class Room {
       ghost.id = socket.id;
       ghost.connected = true;
       ghost.avatar = avatar || ghost.avatar;
+      this.touchGhostClock();
       socket.join(this.code);
       this.sync();
       return { ok: true };
@@ -66,7 +83,7 @@ export class Room {
     if (this.players.length >= MAX_PLAYERS) return { ok: false, error: '房间已满（最多 9 人）' };
     if (this.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: '昵称已被使用' };
     const player: PlayerState = {
-      id: socket.id, name, avatar: avatar || '🙂',
+      id: socket.id, name, avatar: avatar || 'jianxiu',
       hp: this.config.hp, v: 0, alive: true, connected: true,
     };
     this.players.push(player);
@@ -81,6 +98,7 @@ export class Room {
     if (!p) return;
     p.connected = false;
     this.submissions.delete(playerId);
+    this.touchGhostClock();
     if (this.isEmpty()) { this.clearTimer(); return; }
     if (this.hostId === playerId) this.hostId = this.players[0].id;
     // 游戏中人数掉到 1 人以下：直接结算
@@ -99,6 +117,7 @@ export class Room {
   leave(playerId: string) {
     this.players = this.players.filter((p) => p.id !== playerId);
     this.submissions.delete(playerId);
+    this.touchGhostClock();
     if (this.isEmpty()) { this.clearTimer(); return; }
     if (this.hostId === playerId) this.hostId = this.players[0].id;
     this.sync();
@@ -123,6 +142,7 @@ export class Room {
 
   start(playerId: string): { ok: boolean; error?: string } {
     if (playerId !== this.hostId) return { ok: false, error: '只有房主能开始游戏' };
+    if (this.phase === 'pick' || this.phase === 'show') return { ok: false, error: '对局进行中，不能重新开始' };
     if (this.players.length < 2) return { ok: false, error: '至少 2 人才能开始' };
     this.clearTimer();
     for (const p of this.players) { p.hp = this.config.hp; p.v = 0; p.alive = true; }
@@ -237,7 +257,7 @@ export class RoomManager {
 
   sweep() {
     for (const [code, room] of this.rooms) {
-      if (room.isEmpty()) this.rooms.delete(code);
+      if (room.isEmpty() || room.recyclable()) this.rooms.delete(code);
     }
   }
 }

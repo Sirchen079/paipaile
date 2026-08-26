@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { socket, loadProfile, saveProfile, type Profile } from './socket';
 import { checkAuth } from './api';
+import { sfx } from './sfx';
+import { MOVES } from '@shared/moves';
 import LoginView from './components/LoginView.vue';
 import HomeView from './components/HomeView.vue';
 import RoomView from './components/RoomView.vue';
 import GameView from './components/GameView.vue';
+import ArenaDemo from './components/ArenaDemo.vue';
 import type { GameEvent } from '@shared/types';
+
+// #demo 直达特效调试页
+const isDemo = location.hash === '#demo';
 
 interface PlayerPublic {
   id: string; name: string; avatar: string;
@@ -28,6 +34,7 @@ const endData = ref<EndData | null>(null);
 const clockOffset = ref(0);
 const profile = ref<Profile>(loadProfile());
 const toast = ref('');
+const joining = ref(false);
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 function showError(msg: string) {
@@ -36,7 +43,26 @@ function showError(msg: string) {
   toastTimer = setTimeout(() => (toast.value = ''), 2600);
 }
 
+/** 音效引擎需在首次用户手势后才能出声（浏览器自动播放策略） */
+function unlockSfx() { sfx.ensure(); }
+
+/** 14 招水墨特效（~5MB）空闲预载：登录成功即后台拉取，首轮亮牌不闪图 */
+function preloadInkFx() {
+  const start = () => {
+    for (const m of Object.keys(MOVES)) {
+      const img = new Image();
+      img.src = `/inkfx/${m}.webp`;
+      img.decode().catch(() => {});
+    }
+  };
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+  if (w.requestIdleCallback) w.requestIdleCallback(start, { timeout: 5000 });
+  else setTimeout(start, 1800);
+}
+
 onMounted(() => {
+  document.addEventListener('pointerdown', unlockSfx, { once: true });
+
   socket.on('room:state', (s: RoomState) => {
     room.value = s;
     clockOffset.value = s.serverNow - Date.now();
@@ -62,6 +88,24 @@ onMounted(() => {
     results.value = [];
     endData.value = null;
   });
+  // 断线：房间态立即作废（重连后由 room:state 重建），避免拿着旧房态自欺
+  socket.on('disconnect', () => {
+    if (view.value === 'room') room.value = null;
+  });
+  // 重连自动归座：对局中掉线（网络抖动/锁屏）无需手动找房号
+  socket.on('connect', () => {
+    const last = localStorage.getItem('pp_last_code');
+    if (view.value === 'room' && !room.value && last && profile.value.nickname) {
+      socket.emit('room:join',
+        { code: last, nickname: profile.value.nickname, avatar: profile.value.avatar },
+        (r: { ok: boolean }) => {
+          if (!r?.ok) {
+            localStorage.removeItem('pp_last_code');   // 房间已散，别再自动撞墙
+            if (view.value === 'room') view.value = 'home';
+          }
+        });
+    }
+  });
   socket.on('connect_error', (err: Error) => {
     if (err.message.includes('unauthorized')) {
       view.value = 'login';
@@ -72,11 +116,14 @@ onMounted(() => {
     if (ok) {
       view.value = 'home';
       socket.connect();
+      preloadInkFx();
     } else {
       view.value = 'login';
     }
   });
 });
+
+onUnmounted(() => document.removeEventListener('pointerdown', unlockSfx));
 
 function onLoggedIn() {
   view.value = 'home';
@@ -84,21 +131,29 @@ function onLoggedIn() {
 }
 
 function enterRoom(profileIn: Profile, code?: string) {
+  if (joining.value) return;
+  joining.value = true;
   profile.value = profileIn;
   saveProfile(profileIn);
-  const done = (r: { ok: boolean; error?: string }) => {
-    if (!r.ok) showError(r.error ?? '进入房间失败');
+  const done = (r: { ok: boolean; code?: string; error?: string }) => {
+    joining.value = false;
+    if (!r.ok) {
+      showError(r.error ?? '进入房间失败');
+      return;                       // 留在首页，杜绝「白屏无路可退」
+    }
+    if (r.code) localStorage.setItem('pp_last_code', r.code);
+    view.value = 'room';
   };
   if (code) {
     socket.emit('room:join', { code, nickname: profileIn.nickname, avatar: profileIn.avatar }, done);
   } else {
     socket.emit('room:create', { nickname: profileIn.nickname, avatar: profileIn.avatar }, done);
   }
-  view.value = 'room';
 }
 
 function leaveRoom() {
   socket.emit('room:leave');
+  localStorage.removeItem('pp_last_code');
   room.value = null;
   results.value = [];
   endData.value = null;
@@ -127,31 +182,37 @@ function submitMove(moveId: string, targetId?: string) {
 <template>
   <div class="ambient" aria-hidden="true"></div>
 
-  <div v-if="toast" class="overlay" style="background:rgba(10,12,24,.55);justify-content:flex-end;padding-bottom:12vh">
-    <div class="card" style="max-width:90vw">{{ toast }}</div>
-  </div>
+  <div v-if="toast" class="toast" role="alert">{{ toast }}</div>
 
-  <LoginView v-if="view === 'login'" @done="onLoggedIn" />
-  <HomeView v-else-if="view === 'home'" :profile="profile" @enter="enterRoom" />
-  <template v-else-if="view === 'room' && room">
-    <RoomView
-      v-if="room.phase === 'lobby'"
-      :room="room"
-      :my-id="socket.id ?? ''"
-      @config="patchConfig"
-      @start="startGame"
-      @leave="leaveRoom"
-    />
-    <GameView
-      v-else
-      :room="room"
-      :my-id="socket.id ?? ''"
-      :results="results"
-      :end-data="endData"
-      :clock-offset="clockOffset"
-      @submit="submitMove"
-      @start="startGame"
-      @leave="leaveRoom"
-    />
+  <ArenaDemo v-if="isDemo" />
+  <template v-else>
+    <div v-if="view === 'loading'" class="loading-mark brand-title">拍拍乐</div>
+    <LoginView v-if="view === 'login'" @done="onLoggedIn" />
+    <HomeView v-else-if="view === 'home'" :profile="profile" :joining="joining" @enter="enterRoom" />
+    <template v-else-if="view === 'room' && room">
+      <RoomView
+        v-if="room.phase === 'lobby'"
+        :room="room"
+        :my-id="socket.id ?? ''"
+        @config="patchConfig"
+        @start="startGame"
+        @leave="leaveRoom"
+      />
+      <GameView
+        v-else
+        :room="room"
+        :my-id="socket.id ?? ''"
+        :results="results"
+        :end-data="endData"
+        :clock-offset="clockOffset"
+        @submit="submitMove"
+        @start="startGame"
+        @leave="leaveRoom"
+      />
+    </template>
+    <div v-else-if="view === 'room'" class="col" style="align-items: center; margin-top: 20vh; gap: 12px">
+      <div class="brand-title" style="font-size: 30px">正在入座……</div>
+      <button class="ghost" @click="leaveRoom">返回</button>
+    </div>
   </template>
 </template>

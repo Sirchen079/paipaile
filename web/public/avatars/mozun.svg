@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 156 200" width="156" height="200">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#1b2650"/>
+      <stop offset="55%" stop-color="#0d1226"/>
+      <stop offset="100%" stop-color="#070a16"/>
+    </radialGradient>
+    <radialGradient id="aura" cx="50%" cy="46%" r="50%">
+      <stop offset="0%" stop-color="#a86bff" stop-opacity="0.5"/>
+      <stop offset="60%" stop-color="#a86bff" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#a86bff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="robe" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#b79cff"/>
+      <stop offset="100%" stop-color="#3d2470"/>
+    </linearGradient>
+  </defs>
+  <rect width="156" height="200" rx="18" fill="url(#bg)"/>
+  <circle cx="78" cy="92" r="62" fill="url(#aura)"/>
+  <g stroke="#ff3d5e" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.95">
+    <path d="M52 60 L45 45 M104 60 L111 45 M60 52 L52 42 M96 52 L104 42"/>
+  </g>
+  <path d="M60 190 Q40 160 45 120 Q48 90 60 78 Q52 60 60 45 Q68 30 78 30 Q88 30 96 45 Q104 60 96 78 Q108 90 111 120 Q116 160 96 190 Z" fill="url(#robe)" stroke="#ff3d5e" stroke-width="2" opacity="0.96"/>
+  <circle cx="78" cy="58" r="16" fill="url(#robe)" stroke="#ff3d5e" stroke-width="2"/>
+  <path d="M62 52 Q78 34 94 52" fill="none" stroke="#ff3d5e" stroke-width="2"/>
+  <text x="78" y="182" text-anchor="middle" font-family="Ma Shan Zheng, KaiTi, serif" font-size="22" fill="#ff3d5e" letter-spacing="2">魔尊</text>
+</svg>

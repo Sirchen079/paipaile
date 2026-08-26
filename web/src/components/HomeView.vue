@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { AVATARS, type Profile } from '../socket';
+import { AVATARS, AVATAR_LABEL, type Profile } from '../socket';
 
-const props = defineProps<{ profile: Profile }>();
+const props = defineProps<{ profile: Profile; joining?: boolean }>();
 const emit = defineEmits<{ enter: [profile: Profile, code?: string] }>();
 
 const nickname = ref(props.profile.nickname);
 const avatar = ref(props.profile.avatar);
 const code = ref('');
-const canGo = computed(() => nickname.value.trim().length > 0);
+const canGo = computed(() => nickname.value.trim().length > 0 && !props.joining);
+const lastCode = localStorage.getItem('pp_last_code') || '';
 
 function pick(a: string) { avatar.value = a; }
 
@@ -20,6 +21,10 @@ function join() {
   if (!canGo.value || !/^\d{4}$/.test(code.value.trim())) return;
   emit('enter', { nickname: nickname.value.trim(), avatar: avatar.value }, code.value.trim());
 }
+function rejoin() {
+  if (!canGo.value || !lastCode) return;
+  emit('enter', { nickname: nickname.value.trim(), avatar: avatar.value }, lastCode);
+}
 </script>
 
 <template>
@@ -30,25 +35,33 @@ function join() {
     </div>
 
     <div class="card col">
-      <div style="font-weight: 700; letter-spacing: 2px">道友名号</div>
-      <input v-model="nickname" maxlength="12" placeholder="报上名来（玩家认得出你）" />
-      <div class="muted">法相</div>
-      <div class="avatar-grid">
-        <div
-          v-for="a in AVATARS" :key="a" class="avatar-cell" :class="{ on: a === avatar }"
+      <label for="nick" style="font-weight: 700; letter-spacing: 2px">道友名号</label>
+      <input id="nick" v-model="nickname" maxlength="12" placeholder="报上名来（玩家认得出你）" aria-label="道友名号"
+        @keydown.enter.prevent="create" />
+      <div class="muted" id="fz-label">法相</div>
+      <div class="avatar-grid" role="group" aria-labelledby="fz-label">
+        <button
+          v-for="a in AVATARS" :key="a" type="button" class="avatar-cell portrait" :class="{ on: a === avatar }"
+          :aria-label="`选择法相 ${AVATAR_LABEL[a]}`" :aria-pressed="a === avatar"
           @click="pick(a)"
-        >{{ a }}</div>
+        >
+          <img :src="`/avatars/${a}.svg`" :alt="AVATAR_LABEL[a]" />
+        </button>
       </div>
     </div>
 
-    <button class="big" :disabled="!canGo" @click="create">⚔ 开 坛 立 擂</button>
+    <button class="big" :disabled="!canGo" @click="create">{{ joining ? '正 在 入 座 ……' : '开 坛 立 擂' }}</button>
 
     <div class="card col">
-      <div style="font-weight: 700; letter-spacing: 2px">登门挑战</div>
+      <label for="room-code" style="font-weight: 700; letter-spacing: 2px">登门挑战</label>
       <div class="row">
-        <input v-model="code" inputmode="numeric" maxlength="4" placeholder="四位房号" style="letter-spacing: 4px; font-weight: 700" />
+        <input id="room-code" v-model="code" inputmode="numeric" maxlength="4" placeholder="四位房号"
+          style="letter-spacing: 4px; font-weight: 700" aria-label="四位房号" @keydown.enter.prevent="join" />
         <button style="white-space: nowrap" :disabled="!canGo || !/^\d{4}$/.test(code.trim())" @click="join">入 阵</button>
       </div>
+      <button v-if="lastCode && !/^\d{4}$/.test(code.trim())" class="ghost rejoin-chip" :disabled="joining" @click="rejoin">
+        断线重回 · 房号 {{ lastCode }}
+      </button>
     </div>
 
     <div class="muted" style="text-align: center; line-height: 1.8">

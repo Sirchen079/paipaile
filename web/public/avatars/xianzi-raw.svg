@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="34 22 88 172" width="88" height="172">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#1b2650"/>
+      <stop offset="55%" stop-color="#0d1226"/>
+      <stop offset="100%" stop-color="#070a16"/>
+    </radialGradient>
+    <radialGradient id="aura" cx="50%" cy="46%" r="50%">
+      <stop offset="0%" stop-color="#ff9ec6" stop-opacity="0.5"/>
+      <stop offset="60%" stop-color="#ff9ec6" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#ff9ec6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="robe" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe6f2"/>
+      <stop offset="100%" stop-color="#d98ab5"/>
+    </linearGradient>
+  </defs>
+  <circle cx="78" cy="92" r="44" fill="url(#aura)"/>
+  <g stroke="#4ae3ff" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.95">
+    <path d="M55 100 Q78 130 101 100 M78 115 L78 145"/>
+  </g>
+  <path d="M60 190 Q42 165 47 125 Q50 95 62 82 Q56 62 64 48 Q72 34 78 34 Q84 34 92 48 Q100 62 94 82 Q106 95 109 125 Q114 165 96 190 Z" fill="url(#robe)" stroke="#4ae3ff" stroke-width="2" opacity="0.96"/>
+  <circle cx="78" cy="58" r="16" fill="url(#robe)" stroke="#4ae3ff" stroke-width="2"/>
+  <path d="M62 52 Q78 34 94 52" fill="none" stroke="#4ae3ff" stroke-width="2"/>
+</svg>

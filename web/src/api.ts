@@ -1,7 +1,14 @@
 export async function checkAuth(): Promise<boolean> {
   try {
-    const r = await fetch('/api/me');
-    return r.ok;
+    // 服务不可达时 6s 超时放行到登录页，别把用户永远钉在 loading
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 6000);
+    try {
+      const r = await fetch('/api/me', { signal: ctl.signal });
+      return r.ok;
+    } finally {
+      clearTimeout(timer);
+    }
   } catch {
     return false;
   }
