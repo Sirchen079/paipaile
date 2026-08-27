@@ -30,7 +30,7 @@ interface Seat {
 interface FlightHandle { abort: () => void }
 
 /** 施法会话：一次 reveal 对应的飞行物与收场逻辑（被破时统一回收） */
-interface CastSession { flights: Set<FlightHandle>; fizzle?: () => void }
+interface CastSession { flights: Set<FlightHandle>; fizzle?: () => void; broken?: boolean }
 
 /** reveal 演出排期：结算事件相对本 reveal 的延迟（弹道对齐用） */
 interface CastSched { impactDelayMs?: number; session?: CastSession }
@@ -240,6 +240,14 @@ export class Arena {
     // 先置于画外，等 layout() 定位后入场（避免首帧闪现在左上角）
     el.style.left = '-300px';
     el.style.top = '-300px';
+    // 入场：按座次错峰落座（仅创建时一次；resize 重排不重播）
+    if (!this.reduceMotion) {
+      el.animate(
+        [{ transform: 'translate(-50%,-50%) scale(.3)', opacity: 0 },
+         { transform: 'translate(-50%,-50%) scale(1.08)', opacity: 1, offset: 0.7 },
+         { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }],
+        { duration: 340, delay: Math.min((num - 1) * 60, 520), easing: 'cubic-bezier(.2,.8,.3,1)' });
+    }
     // 只允许可选目标触发出招（防止点自己/死者/无关令牌把已选招浪费在无效提交上）
     const activate = () => { if (el.classList.contains('selectable')) this.seatCb?.(id); };
     el.addEventListener('click', activate);
@@ -361,6 +369,9 @@ export class Arena {
     const c = this.casts.get(pid);
     if (!c) return;
     this.casts.delete(pid);
+    // 取消事件的排期（reveal+650ms）可能早于弹道 launch（superShock ≈660ms/究极 ≥1150ms）：
+    // 此刻 flights 还是空集，必须立 broken 标记，让迟发的弹道/蓄力段在 launch 处自弃
+    c.broken = true;
     for (const f of c.flights) f.abort();
     c.fizzle?.();
   }
@@ -481,12 +492,18 @@ export class Arena {
     this.darkOv.animate([{ opacity: on ? 0 : p }, { opacity: on ? p : 0 }], { duration: dur, fill: 'forwards' });
   }
 
-  private floatText(txt: string, x: number, y: number, cls = '') {
+  private floatText(txt: string, x: number, y: number, cls = '', accent?: string) {
     const el = document.createElement('div');
     el.className = 'ifloat ' + cls;
     el.textContent = txt;
     el.style.left = x + 'px';
     el.style.top = (y - 46 * this.tokScale) + 'px';
+    // 招式色彩读数（moves.ts 的 color 元数据激活点）：朱砂正文不变，只垫同色发丝底线 + 微光
+    if (accent) {
+      el.style.borderBottom = `2px solid ${rgba(accent, 0.85)}`;
+      el.style.paddingBottom = '2px';
+      el.style.textShadow = `0 1px 0 rgba(255,255,255,.85), 0 0 10px ${rgba(accent, 0.45)}`;
+    }
     this.fxLayer.appendChild(el);
     el.animate(
       [{ transform: 'translate(-50%,0) scale(.6)', opacity: 0 },
@@ -794,13 +811,23 @@ export class Arena {
     };
   }
 
-  /** 命中爆点：墨爆素材小规模复用 + 粒子三连 */
-  private hitBurst(x: number, y: number, big = false) {
-    this.playBoom('magicBurst', x, y, (big ? 300 : 170) * this.u, 80, 1.1);
-    this.FX.burstInk(x, y, big ? 34 : 18, big ? 7 : 4.5);
-    this.FX.burstSparks(x, y, big ? 22 : 10, big ? 8 : 5);
-    if (big) this.FX.burstEmbers(x, y, 12, 4);
-    this.FX.ring(x, y, (big ? 200 : 110) * this.u);
+  /** 命中爆点：墨爆素材小规模复用 + 粒子三连（k=目标视觉缩放：遁地为 0.55，爆点等比收小） */
+  private hitBurst(x: number, y: number, big = false, k = 1) {
+    this.playBoom('magicBurst', x, y, (big ? 300 : 170) * this.u * k, 80, 1.1);
+    this.FX.burstInk(x, y, Math.round((big ? 34 : 18) * (0.6 + 0.4 * k)), (big ? 7 : 4.5) * k);
+    this.FX.burstSparks(x, y, Math.round((big ? 22 : 10) * (0.6 + 0.4 * k)), (big ? 8 : 5) * k);
+    if (big) this.FX.burstEmbers(x, y, 12, 4 * k);
+    this.FX.ring(x, y, (big ? 200 : 110) * this.u * k);
+  }
+
+  /**
+   * 令牌视觉锚点：结算反馈（爆点/飘字/粒子）必须对齐令牌「当前展示位」而非座次基础位。
+   * 飞天令牌抬升 -46×tokScale、遁地下沉 +26×tokScale——tokScale 随座位数/窗口宽度变化
+   * （9 人窄屏低至 ~0.4），用基础坐标会让爆点脱靶到令牌脚下。
+   */
+  private seatAnchor(seat: Seat): { x: number; y: number; k: number } {
+    const lift = seat.flying ? -46 * this.tokScale : seat.underground ? 26 * this.tokScale : 0;
+    return { x: seat.x, y: seat.y + lift, k: seat.underground ? 0.55 : 1 };
   }
 
   /* ================= 常驻状态特效 ================= */
@@ -1258,6 +1285,7 @@ export class Arena {
       const s = this.flightSched(sched?.impactDelayMs, Arena.FLIGHT_MS.shock!);
       this.castHold(from, s.delayMs);
       this.playLater(() => {
+        if (sched?.session?.broken) return;   // 已被反制：迟发弹道不再起飞
         const h = this.flyFx('shock', from, to, 330 * this.u, false, 1, s.flightMs);
         sched?.session?.flights.add(h);
       }, s.delayMs);
@@ -1270,6 +1298,7 @@ export class Arena {
       this.castHold(from, s.delayMs);
       this.FX.converge(from.x, from.y, 22, 110 * this.u);   // 出手聚能
       this.playLater(() => {
+        if (sched?.session?.broken) return;   // 已被反制：迟发弹道不再起飞
         const h = this.flyFx('superShock', from, to, 380 * this.u, true, 1.5, s.flightMs);
         sched?.session?.flights.add(h);
         // 沿途朱砂冲击环：读出「贯穿而过」的压迫感（提速后环距收紧）
@@ -1418,11 +1447,13 @@ export class Arena {
       ], { duration: beamLife * 0.22, delay: beamLife * 0.06, fill: 'forwards', easing: 'ease-out' });
       // 沿束金芒（加密:三粒一组）
       this.every(() => {
+        if (sched?.session?.broken) return;   // 束体已被打断：金芒止息
         const tt = Math.random();
         this.FX.burstSparks(from.x + dx * tt, from.y + dy * tt, 3, 2.2);
       }, 30, beamLife);
-      // 贯穿时刻:三层同时白热 + 落点金光柱拔地 + 强化爆点
+      // 贯穿时刻:三层同时白热 + 落点金光柱拔地 + 强化爆点（被反制打断则不再播）
       this.playLater(() => {
+        if (sched?.session?.broken) return;
         for (const t of [el, glow, coreLine]) {
           t.animate([
             { filter: 'brightness(1)' },
@@ -1430,11 +1461,13 @@ export class Arena {
             { filter: 'brightness(1)' },
           ], { duration: 220, fill: 'none', easing: 'ease-out' });
         }
+        // 落点跟随目标令牌当前视觉位（回调时实时读，含姿态偏移与布局变化）
+        const a = this.seatAnchor(to);
         const pil = document.createElement('div');
         pil.className = 'beam-pillar';
-        pil.style.left = to.x + 'px';
-        pil.style.top = to.y + 'px';
-        pil.style.height = 200 * this.u + 'px';
+        pil.style.left = a.x + 'px';
+        pil.style.top = a.y + 'px';
+        pil.style.height = 200 * this.u * a.k + 'px';
         pil.style.transformOrigin = '50% 100%';
         pil.style.transform = 'translate(-50%,-88%) scaleY(0)';
         this.fxLayer.appendChild(pil);
@@ -1444,9 +1477,9 @@ export class Arena {
         ], { duration: 110, fill: 'forwards', easing: 'ease-out' });
         pil.animate([{ opacity: 0.95 }, { opacity: 0 }], { duration: 300, delay: 150, fill: 'forwards', easing: 'ease-in' });
         this.later(() => pil.remove(), 520);
-        this.FX.ring(to.x, to.y, 190 * this.u, '255,215,0', 3);
-        this.FX.burstSparks(to.x, to.y, 18, 7);
-        this.FX.burstEmbers(to.x, to.y, 10, 4);
+        this.FX.ring(a.x, a.y, 190 * this.u * a.k, '255,215,0', 3);
+        this.FX.burstSparks(a.x, a.y, Math.round(18 * (0.6 + 0.4 * a.k)), 7 * a.k);
+        this.FX.burstEmbers(a.x, a.y, 10, 4 * a.k);
       }, Math.max(0, impactMs - 30));
       this.later(() => { el.remove(); glow.remove(); coreLine.remove(); }, beamLife + 80);
       // 被破打断：三层束体中点碎裂消散
@@ -1596,9 +1629,10 @@ export class Arena {
       const chargeStart = cutIn ? 1000 : 200;
       const chargeDur = Math.max(200, fireAt - 280 - chargeStart);
       this.playLater(() => {
+        if (sched?.session?.broken) return;   // 已被魔爆所破：蓄力段整体作废
         sfx.chargeRise(Math.min(1.2, chargeDur / 1000 + 0.2));
-        this.every(() => this.FX.converge(from.x, from.y, 16, 150 * this.u), 220, chargeDur);
-        this.every(() => this.shake(2, 130), 320, chargeDur);
+        this.every(() => { if (sched?.session?.broken) return; this.FX.converge(from.x, from.y, 16, 150 * this.u); }, 220, chargeDur);
+        this.every(() => { if (sched?.session?.broken) return; this.shake(2, 130); }, 320, chargeDur);
       }, chargeStart);
       const core = this.spawnFx('ultimate', from.x - dirx * 50, from.y - diry * 26, 280 * this.u, [
         { transform: tf(0.2, ang + 180), opacity: 0 },
@@ -1608,6 +1642,7 @@ export class Arena {
 
       // ③ 静止屏息：释放前一拍全场定格（墨核涨势与粒子全部冻结，白核一亮）——力量的呼吸口
       this.playLater(() => {
+        if (sched?.session?.broken) return;
         this.hitStop(190);
         core.animate([{ filter: 'brightness(1)' }, { filter: 'brightness(7) saturate(1.4)' }],
           { duration: 200, fill: 'forwards' });
@@ -1617,6 +1652,7 @@ export class Arena {
 
       // ④ 重磅释放：轰鸣 + 速度线大爆发 + 双冲击环 + 施法者后坐 + 墨龙拖残影扫场，飞行全程余震
       this.playLater(() => {
+        if (sched?.session?.broken) return;   // 已被反制：墨龙不再出膛
         sfx.ultimateFire();
         sfx.zap(true);
         this.FX.burstStreaks(from.x, from.y, 22, 15);
@@ -1641,6 +1677,7 @@ export class Arena {
 
       // ⑤ 双闪大爆发：白闪两连 + 墨龙白剪影放大定格 + 纯墨迸溅 + 双冲击环 + 长顿帧强推镜（结算时刻）
       this.playLater(() => {
+        if (sched?.session?.broken) return;
         sfx.ultimateHit();
         const c = this.center();
         this.flash(0.95, 180);
@@ -1661,10 +1698,11 @@ export class Arena {
         this.later(() => sil.remove(), 300);
       }, boomAt);
       this.playLater(() => this.darken(false, 420), boomAt + 1000);
-      // 被魔爆术取消：cut-in 自然收场，暗场立即复明、余烬风暴止息（飞行物由 breakCast 碎裂）
+      // 被魔爆术取消：cut-in 自然收场，暗场立即复明、余烬风暴止息、墨核熄灭（飞行物由 breakCast 碎裂）
       sched?.session && (sched.session.fizzle = () => {
         this.darken(false, 250);
         this.FX.emberStorm(0);
+        this.fadeRemove(core, 160);
       });
     },
   };
@@ -1696,6 +1734,7 @@ export class Arena {
       if (brk) {
         slots.push({ ev: brk, at: t + Math.min(pace, 650) });
         t += pace + eventPaceMs(brk);
+        cancelOf.delete((ev as { p: string }).p);   // 演武场 showcase 同人多次 reveal：取消只随首次 reveal 播一次，防重复播报+时轴漂移
       } else {
         t += pace;
       }
@@ -1790,6 +1829,7 @@ export class Arena {
         this.lastHitSrc.set(ev.dst, ev.src);
         const dirX = srcSeat ? (Math.sign(s.x - srcSeat.x) || 1) : 0;
         const big = ev.lethal || MOVES[ev.move].cost >= 2;
+        const a = this.seatAnchor(s);   // 爆点/飘字对齐令牌展示位（飞天抬升/遁地下沉）
         sfx.hit(big);
         if (s.shield > 0) {
           // 能穿过盾落地必是穿透（一阳指/超级冲击波…）：自研碎盾贯穿演出
@@ -1797,12 +1837,12 @@ export class Arena {
           this.detachShieldFx(s, false);
           s.shield = 0;
           this.refreshBadge(s);
-          this.floatText('碎盾·命中', s.x, s.y);
+          this.floatText('碎盾·命中', a.x, a.y, '', MOVES[ev.move].color);
         } else {
-          this.hitBurst(s.x, s.y, big);
-          this.floatText('命中', s.x, s.y);
+          this.hitBurst(a.x, a.y, big, a.k);
+          this.floatText('命中', a.x, a.y, '', MOVES[ev.move].color);
         }
-        if (big) this.FX.burstStreaks(s.x, s.y, 10, 10);
+        if (big) this.FX.burstStreaks(a.x, a.y, 10, 10);
         this.hitReact(s, dirX, big ? 1.25 : 1);
         this.shake(big ? 8 : 5, big ? 400 : 300);
         this.hitStop(big ? 90 : 60);
@@ -1830,7 +1870,7 @@ export class Arena {
         if (ev.by === 'shield') {
           // 普盾挡下一次攻击即碎：金石一挡 → 盾身碎裂，两拍分明
           sfx.blocked();
-          this.floatText('盾碎·格挡', s.x, s.y, 'block');
+          this.floatText('盾碎·格挡', s.x, s.y, 'block', MOVES[ev.move].color);
           this.later(() => { sfx.shatter(); this.shatterShieldFx(s); }, 70);
           this.detachShieldFx(s, false);
           s.shield = 0;
@@ -1838,7 +1878,7 @@ export class Arena {
         } else {
           // 超盾稳稳接下：盾体沿来向被顶退、再带过冲弹回（吃了一记重的，但没破）
           sfx.blocked(big);
-          this.floatText('格挡', s.x, s.y, 'block');
+          this.floatText('格挡', s.x, s.y, 'block', MOVES[ev.move].color);
           const k = big ? 1.25 : 1;
           s.shieldFxEl?.animate([
             { transform: tf(1) },
@@ -1854,8 +1894,9 @@ export class Arena {
         const s = this.seats.get(ev.dst);
         if (s) {
           sfx.miss();
-          this.floatText('闪避', s.x, s.y, 'dodge');
-          this.FX.puff(s.x, s.y - 20);
+          const a = this.seatAnchor(s);
+          this.floatText('闪避', a.x, a.y, 'dodge', MOVES[ev.move].color);
+          this.FX.puff(a.x, a.y - 20);
         }
         break;
       }
@@ -1891,16 +1932,17 @@ export class Arena {
         const s = this.seats.get(ev.p);
         if (!s) break;
         const srcSeat = this.seats.get(this.lastHitSrc.get(ev.p) ?? '');
+        const a = this.seatAnchor(s);   // 空中陨落（锤天/锤天锤地/究极击杀飞天者）爆点跟随令牌
         sfx.death();
-        this.hitBurst(s.x, s.y, true);
-        this.FX.burstInk(s.x, s.y, 44, 9);
-        this.FX.burstStreaks(s.x, s.y, 12, 11);
+        this.hitBurst(a.x, a.y, true, a.k);
+        this.FX.burstInk(a.x, a.y, 44, 9);
+        this.FX.burstStreaks(a.x, a.y, 12, 11);
         this.hitReact(s, srcSeat ? (Math.sign(s.x - srcSeat.x) || 1) : 0, 1.6);
-        this.floatText(`${nameOf(ev.p)} 陨落`, s.x, s.y, 'dead');
+        this.floatText(`${nameOf(ev.p)} 陨落`, a.x, a.y, 'dead');
         this.flash(0.5, 160);
         this.shake(12, 600);
         this.hitStop(150);
-        this.addStain(s);
+        this.addStain(s);               // 尸渍留在地面原位（身死落地）
         s.el.classList.add('dead');
         if (ev.p === this.myId) this.haptic([80, 60, 120]);
         break;
@@ -1915,4 +1957,10 @@ export class Arena {
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+/** #rrggbb → rgba()（飘字招式色微光用，色彩以 moves.ts 元数据为准） */
+function rgba(hex: string, a: number) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }

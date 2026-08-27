@@ -106,13 +106,6 @@ function onLeaveClick() {
           <option v-for="s in [10, 15, 20, 30]" :key="s" :value="s">{{ s }} 秒</option>
         </select>
       </div>
-      <div class="row spread">
-        <span>同门误伤 <span class="muted">（组队模式生效）</span></span>
-        <button v-if="isHost" class="ghost" style="padding: 7px 16px" @click="emit('config', { friendlyFire: !room.config.friendlyFire })">
-          {{ room.config.friendlyFire ? '开' : '关（默认）' }}
-        </button>
-        <b v-else style="color: var(--ink-3)">{{ room.config.friendlyFire ? '开' : '关' }}</b>
-      </div>
     </div>
 
     <button v-if="isHost" class="big" :disabled="room.players.length < 2" @click="emit('start')">

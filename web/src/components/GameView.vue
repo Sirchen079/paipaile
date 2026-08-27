@@ -72,6 +72,13 @@ const secondsLeft = computed(() => {
   return Math.max(0, Math.ceil(remain / 1000));
 });
 
+/** 出招时限剩余比例（0~100，水墨进度线的驱动值；随 250ms 心跳线性流动） */
+const pctLeft = computed(() => {
+  if (props.room.phase !== 'pick') return 0;
+  const total = props.room.config.pickSeconds * 1000;
+  return Math.max(0, Math.min(100, ((props.room.deadline - (now.value + props.clockOffset)) / total) * 100));
+});
+
 const nameOf = (id: string) => stagePlayers.value.find((p) => p.id === id)?.name ?? props.room.players.find((p) => p.id === id)?.name ?? '?';
 
 function syncArena() {
@@ -204,9 +211,22 @@ const endWinnerText = computed(() => {
   return `${names || '无人'} · 问鼎大道`;
 });
 
-// 终局音：胜者奏凯，其余送别
-watch(() => props.endData, (e) => {
-  if (!e) return;
+/** 胜者排面（平局不展示）：从战报取胜者法相，金框头衔「魁」 */
+const winnerFaces = computed(() => {
+  if (!props.endData || props.endData.draw) return [];
+  const avatars = new Map(props.endData.standings.map((p) => [p.id, p.avatar]));
+  return props.endData.winners.map((id) => ({ id, avatar: avatars.get(id) ?? 'jianxiu' }));
+});
+const avatarOf = (id: string) =>
+  props.endData?.standings.find((p) => p.id === id)?.avatar ?? 'jianxiu';
+
+/** 结算遮罩揭幕时机：终局数据到达时先让最后一回合的演出收尾（如阵亡墨渍/大爆余韵），再揭开战报 */
+const showEnd = computed(() => !!props.endData && !playing.value);
+
+// 终局音与揭幕同拍：胜者奏凯，其余送别（重连进终局桌面时不响，避免无来由的哀乐）
+watch(showEnd, (on) => {
+  if (!on || !props.endData) return;
+  const e = props.endData;
   if (!e.draw && e.winners.includes(props.myId)) sfx.win();
   else sfx.lose();
 });
@@ -222,21 +242,27 @@ watch(() => props.endData, (e) => {
         </div>
         <div v-if="room.phase === 'pick'" class="countdown" :class="{ urgent: secondsLeft <= 5 }">{{ secondsLeft }}<span style="font-size: 16px">秒</span></div>
         <div v-else class="muted">房号 {{ room.code }}</div>
+        <!-- 水墨时限线：朱砂渐短，紧张感随墨退而涨 -->
+        <div v-if="room.phase === 'pick'" class="deadline-track" aria-hidden="true">
+          <div class="deadline-fill" :class="{ urgent: secondsLeft <= 5 }" :style="{ width: pctLeft + '%' }"></div>
+        </div>
       </div>
 
       <div ref="arenaEl" class="game-stage" />
 
-      <!-- 底部状态条：已出招 / 待选目标 / 观战 -->
-      <div v-if="canPick && selectedMove" class="pick-hint">
-        <b>【{{ MOVES[selectedMove].name }}】</b>点场中圆点选定对手
-        <button class="ghost" style="padding: 5px 14px" @click="selectedMove = null">收回</button>
-      </div>
-      <div v-else-if="canPick" class="pick-hint muted">
-        静候出招……（{{ stagePlayers.filter(p => p.alive && p.picked).length }}/{{ stagePlayers.filter(p => p.alive).length }} 已定）
-      </div>
-      <div v-else-if="room.phase === 'pick' && me?.picked" class="pick-hint ok">神通已定 · 静候诸位同道亮牌</div>
-      <div v-else-if="!me?.alive && room.phase !== 'end'" class="pick-hint muted">已化作看客 · 观诸君斗法</div>
-      <div v-else class="pick-hint muted">神通齐发 · 一回合定生死</div>
+      <!-- 底部状态条：已出招 / 待选目标 / 观战（状态切换带呼吸式过渡） -->
+      <Transition name="hint-fade" mode="out-in">
+        <div v-if="canPick && selectedMove" key="targeting" class="pick-hint">
+          <b>【{{ MOVES[selectedMove].name }}】</b>点场中圆点选定对手
+          <button class="ghost" style="padding: 5px 14px" @click="selectedMove = null">收回</button>
+        </div>
+        <div v-else-if="canPick" key="picking" class="pick-hint muted">
+          静候出招……（{{ stagePlayers.filter(p => p.alive && p.picked).length }}/{{ stagePlayers.filter(p => p.alive).length }} 已定）
+        </div>
+        <div v-else-if="room.phase === 'pick' && me?.picked" key="picked" class="pick-hint ok">神通已定 · 静候诸位同道亮牌</div>
+        <div v-else-if="!me?.alive && room.phase !== 'end'" key="spectating" class="pick-hint muted">已化作看客 · 观诸君斗法</div>
+        <div v-else key="revealing" class="pick-hint muted">神通齐发 · 一回合定生死</div>
+      </Transition>
     </div>
 
     <!-- 右：技能侧栏 -->
@@ -263,7 +289,7 @@ watch(() => props.endData, (e) => {
             <div class="tier">{{ COST_LABEL[cost] }}</div>
             <button
               v-for="m in moveGroup(cost)" :key="m" class="skill-btn"
-              :class="{ pending: selectedMove === m }"
+              :class="{ pending: selectedMove === m, poor: MOVES[m].cost > (me?.v ?? 0) }"
               :disabled="MOVES[m].cost > (me?.v ?? 0)"
               @click="onMoveClick(m)"
             >
@@ -280,8 +306,14 @@ watch(() => props.endData, (e) => {
       </div>
     </aside>
 
-    <!-- 结算遮罩 -->
-    <div v-if="endData" class="overlay">
+    <!-- 结算遮罩（演出收尾后揭幕） -->
+    <div v-if="endData && showEnd" class="overlay">
+      <div v-if="winnerFaces.length" class="winner-row">
+        <span v-for="(w, i) in winnerFaces" :key="w.id" class="winner-slot" :style="{ animationDelay: (0.1 + i * 0.14) + 's' }">
+          <img class="winner-face" :src="`/avatars/${w.avatar}.svg`" alt="" />
+          <span class="winner-seal">魁</span>
+        </span>
+      </div>
       <div class="win-title">{{ endWinnerText }}</div>
       <div class="card end-card" style="max-width: 86vw; min-width: min(340px, 86vw)">
         <div class="muted" style="text-align: center; margin-bottom: 8px; letter-spacing: 3px">本 局 战 报</div>
@@ -289,7 +321,10 @@ watch(() => props.endData, (e) => {
           v-for="(p, i) in endData.standings" :key="p.id" class="row spread end-row"
           :style="{ animationDelay: (0.15 + i * 0.09) + 's' }"
         >
-          <span class="end-name" :class="{ win: p.alive }">{{ p.name }}</span>
+          <span class="row" style="gap: 8px">
+            <img class="end-face" :class="{ dead: !p.alive }" :src="`/avatars/${p.avatar}.svg`" alt="" />
+            <span class="end-name" :class="{ win: p.alive }">{{ p.name }}</span>
+          </span>
           <span class="end-note" :class="{ win: p.alive }">{{ p.alive ? '胜出' : deathRound.has(p.id) ? `陨落于第 ${deathRound.get(p.id)} 回合` : '中途离场' }}</span>
         </div>
       </div>

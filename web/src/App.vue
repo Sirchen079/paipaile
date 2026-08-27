@@ -64,6 +64,12 @@ onMounted(() => {
   socket.on('room:state', (s: RoomState) => {
     room.value = s;
     clockOffset.value = s.serverNow - Date.now();
+    // 重连/中途入房恰好落在终局阶段时，game:end 已错过收不到——
+    // 从当前战况推导兜底战报（存活者即胜者），否则玩家被困在无按钮的死局桌面
+    if (s.phase === 'end' && !endData.value) {
+      const winners = s.players.filter((p) => p.alive).map((p) => p.id);
+      endData.value = { winners, draw: winners.length === 0, standings: s.players };
+    }
     if (s.phase === 'lobby' && view.value === 'room' && results.value.length && !endData.value) {
       results.value = [];
     }
@@ -100,6 +106,9 @@ onMounted(() => {
           if (!r?.ok) {
             localStorage.removeItem('pp_last_code');   // 房间已散，别再自动撞墙
             if (view.value === 'room') view.value = 'home';
+          } else {
+            results.value = [];   // 新会话开卷：上一局的战报缓存不作数（防旧死亡回合污染终局表）
+            if (room.value?.phase !== 'end') endData.value = null;
           }
         });
     }
@@ -152,6 +161,9 @@ function enterRoom(profileIn: Profile, code?: string) {
       return;                       // 留在首页，杜绝「白屏无路可退」
     }
     if (r.code) localStorage.setItem('pp_last_code', r.code);
+    results.value = [];     // 入座即新卷：清上一局的战报缓存（中途加入残局/重开局面防串档）
+    // 终局房间的兜底战报由 room:state 推导（可能已先于本 ack 到达），别误清
+    if (room.value?.phase !== 'end') endData.value = null;
     view.value = 'room';
   };
   if (code) {

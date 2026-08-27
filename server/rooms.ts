@@ -106,16 +106,7 @@ export class Room {
     this.touchGhostClock();
     if (this.isEmpty()) { this.clearTimer(); return; }
     if (this.hostId === playerId) this.hostId = this.players[0].id;
-    // 游戏中人数掉到 1 人以下：直接结算
-    if (this.phase === 'pick' || this.phase === 'show') {
-      const alive = this.players.filter((x) => x.alive);
-      if (alive.length <= 1) {
-        this.clearTimer();
-        this.endGame({ over: true, winners: alive.map((x) => x.id), draw: alive.length === 0 });
-        return;
-      }
-      if (this.phase === 'pick' && this.allSubmitted()) this.resolveNow();
-    }
+    this.endIfDecided();
     this.sync();
   }
 
@@ -125,7 +116,23 @@ export class Room {
     this.touchGhostClock();
     if (this.isEmpty()) { this.clearTimer(); return; }
     if (this.hostId === playerId) this.hostId = this.players[0].id;
+    // 主动离场与掉线同规：对局中活人 ≤1 即刻终局（否则残局每轮空转倒计时）
+    this.endIfDecided();
     this.sync();
+  }
+
+  /** 对局进行中若存活人数不足以继续（≤1），立即终局；返回是否已收场 */
+  private endIfDecided(): boolean {
+    if (this.phase !== 'pick' && this.phase !== 'show') return false;
+    const alive = this.players.filter((x) => x.alive);
+    if (alive.length > 1) {
+      // 出招阶段全员已亮牌（含离场者移除后）也直接开算，不干等超时
+      if (this.phase === 'pick' && this.allSubmitted()) { this.resolveNow(); return true; }
+      return false;
+    }
+    this.clearTimer();
+    this.endGame({ over: true, winners: alive.map((x) => x.id), draw: alive.length === 0 });
+    return true;
   }
 
   setConfig(playerId: string, patch: Partial<RoomConfig>): { ok: boolean; error?: string } {

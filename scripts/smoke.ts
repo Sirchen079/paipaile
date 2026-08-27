@@ -80,7 +80,7 @@ async function main() {
       if (MOVES[moveId].needsTarget) {
         // 链式指目标（A→B→C→A 环）：杜绝互指对冲抵消，保证每回合稳定产生命中
         const sortedIds = snap.players.filter((p) => p.alive).map((p) => p.id).sort();
-        const pos = sortedIds.indexOf(sock.id);
+        const pos = sortedIds.indexOf(sock.id ?? '');
         if (pos >= 0) targetId = sortedIds[(pos + 1) % sortedIds.length];
       }
       sock.emit('game:submit', { moveId, targetId }, (r: any) => {

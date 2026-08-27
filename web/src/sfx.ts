@@ -6,6 +6,8 @@
 class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** 复用白噪声底：1s 缓存，播放时随机取偏移段（免每声新建 Buffer 的分配抖动） */
+  private noiseBuf: AudioBuffer | null = null;
   muted = localStorage.getItem('pp_sfx') === 'off';
 
   /** 首次用户手势后调用（浏览器自动播放策略）；之后每次播放前兜底 resume */
@@ -19,6 +21,12 @@ class Sfx {
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.55;
       this.master.connect(this.ctx.destination);
+      // 预铸 1 秒白噪声（重建 AudioContext 时随旧缓冲一起作废）
+      const n = Math.floor(this.ctx.sampleRate * 1.02);
+      const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      this.noiseBuf = buf;
     } catch { /* 环境不支持音频，静默降级 */ }
   }
 
@@ -56,16 +64,13 @@ class Sfx {
     o.stop(t + dur + 0.05);
   }
 
-  /** 噪声爆发：带滤波扫频（打击感的主体） */
+  /** 噪声爆发：带滤波扫频（打击感的主体）。随机取段偏移让每次音色微异 */
   private noise(dur: number, vol: number, filter: BiquadFilterType, f0: number, f1 = f0, delay = 0, q = 1) {
+    if (!this.noiseBuf) return;
     const t = this.t0 + delay;
     const j = this.jitter();
-    const n = Math.floor(this.ctx!.sampleRate * dur);
-    const buf = this.ctx!.createBuffer(1, n, this.ctx!.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
     const src = this.ctx!.createBufferSource();
-    src.buffer = buf;
+    src.buffer = this.noiseBuf;
     const bi = this.ctx!.createBiquadFilter();
     bi.type = filter;
     bi.Q.value = q;
@@ -75,7 +80,8 @@ class Sfx {
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(bi).connect(g).connect(this.master!);
-    src.start(t);
+    const maxOff = Math.max(0, this.noiseBuf.duration - dur - 0.01);
+    src.start(t, Math.random() * maxOff, dur + 0.02);
   }
 
   /** 古筝式拨弦（三角波快衰减，胜利动机用） */
